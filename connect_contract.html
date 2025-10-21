@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>CLQ Message Board 前端（MetaMask + Approve + Permit）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- ethers v6 UMD + 後備 -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js" crossorigin="anonymous"></script>
+  <script>if(!window.ethers){document.write('<script src="https://unpkg.com/ethers@6.13.2/dist/ethers.umd.min.js"><\/script>')}</script>
+  <style>
+    :root{--bg:#0b1020;--card:#121934;--text:#e8ecff;--muted:#aab3d7;--accent:#6ea8fe;--warn:#ffb86b;--err:#ff6b6b}
+    *{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#0b1020,#0e1430);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Noto Sans,Arial}
+    .wrap{max-width:1100px;margin:28px auto;padding:0 16px}
+    .card{background:var(--card);border:1px solid #223;border-radius:18px;box-shadow:0 8px 30px rgba(0,0,0,.25);padding:18px;margin:12px 0}
+    h1{margin:0 0 8px;font-size:24px}h2{margin:6px 0 12px;font-size:18px;color:var(--accent)}
+    label{display:block;margin:10px 0 6px;color:var(--muted)}input,button,textarea{font:inherit}
+    input,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid #2a3357;background:#0c132b;color:var(--text);outline:none}
+    textarea{min-height:80px;resize:vertical}
+    input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(110,168,254,.2)}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+    .btn{background:#1d2a56;border:1px solid #2a3a74;padding:10px 14px;border-radius:12px;color:var(--text);cursor:pointer}
+    .btn.primary{background:#2749a7;border-color:#3461db}.btn.warn{background:#5b3b12;border-color:#8a5a1a}
+    .btn:hover{filter:brightness(1.08)} .muted{color:var(--muted);font-size:14px}
+    .kv{display:grid;grid-template-columns:180px 1fr;gap:6px 12px}
+    .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+    .noteBox{padding:12px;border:1px dashed #2b3b78;border-radius:12px;background:#0f1733;min-height:44px;white-space:pre-wrap}
+    .pill{display:inline-block;padding:2px 8px;border:1px solid #2b3b78;border-radius:999px;background:#0e1738;font-size:12px}
+    .error{color:var(--err)} .ok{color:#9af29a}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>CLQ Message Board（Approve + Permit）</h1>
+    <div class="row" style="align-items:end">
+      <div>
+        <button id="btnConnect" class="btn primary">連接 MetaMask</button>
+        <div class="kv" style="margin-top:10px">
+          <div>帳號：</div><div id="acc" class="mono muted">未連接</div>
+          <div>網路：</div><div id="net" class="mono muted">—</div>
+        </div>
+      </div>
+      <div class="muted">這個頁面針對你的 <b>CLQMessageBoard</b> 寫好：支援 <b>storeMessage</b> 與 <b>permitAndStore</b>，會自動讀取 <b>fee</b> 與 <b>CLQ 代幣位址</b>。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>1) 設定合約地址</h2>
+    <div class="row">
+      <div>
+        <label>MessageBoard 合約地址（CLQMessageBoard）</label>
+        <input id="boardAddr" placeholder="0x...（你部署的 CLQMessageBoard）" />
+      </div>
+      <div>
+        <label>常用</label>
+        <div class="row">
+          <button id="btnSaveBoard" class="btn">儲存地址</button>
+          <button id="btnClearBoard" class="btn warn">清除地址</button>
+        </div>
+        <div class="muted" style="margin-top:6px">會記在 LocalStorage，下次打開自動帶入。</div>
+      </div>
+    </div>
+    <div class="kv" style="margin-top:10px">
+      <div>CLQ 代幣地址（自動讀取）：</div><div id="clqAddr" class="mono muted">—</div>
+      <div>CLQ 名稱與小數位（自動讀取）：</div><div id="clqMeta" class="mono muted">—</div>
+      <div>手續費 fee（最小單位）：</div><div id="feeRaw" class="mono muted">—</div>
+      <div>手續費（人類可讀）：</div><div id="feeHuman" class="mono muted">—</div>
+    </div>
+    <div style="margin-top:10px">
+      <button id="btnLoadBoard" class="btn">讀取 CLQ/fee 資訊</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2) Approve + storeMessage</h2>
+    <div class="row3">
+      <div>
+        <label>Spender（自動＝MessageBoard）</label>
+        <input id="spender" placeholder="預設使用 MessageBoard 位址" />
+      </div>
+      <div>
+        <label>Approve 數量（人類可讀；預設＝fee）</label>
+        <input id="approveAmount" placeholder="例如 10（會轉換為最小單位）" />
+      </div>
+      <div style="display:flex;align-items:end">
+        <button id="btnApprove" class="btn">批准（approve）</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div>
+        <label>要寫入的訊息（content）</label>
+        <textarea id="content" placeholder="輸入要上鏈的字串…"></textarea>
+      </div>
+      <div style="display:flex;align-items:end">
+        <button id="btnStore" class="btn primary">storeMessage（扣 fee 並寫入）</button>
+      </div>
+    </div>
+    <div class="kv" style="margin-top:8px">
+      <div>目前 allowance：</div><div id="allowance" class="mono muted">—</div>
+      <div>最近交易哈希：</div><div id="tx1" class="mono muted">—</div>
+    </div>
+    <div style="margin-top:8px">
+      <button id="btnCheckAllowance" class="btn">查詢 allowance(我→MessageBoard)</button>
+      <button id="btnMyCLQBalance" class="btn">查詢我的 CLQ 餘額</button>
+      <span id="myCLQ" class="mono muted"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>3) Permit + permitAndStore（EIP-2612，一次完成核准與寫入）</h2>
+    <div class="row3">
+      <div>
+        <label>Deadline（秒，預設＝現在+3600）</label>
+        <input id="deadline" placeholder="UNIX 秒；留空自動填" />
+      </div>
+      <div>
+        <label>待簽名的 value（預設＝fee）</label>
+        <input id="permitValue" placeholder="人類可讀數；留空用 fee" />
+      </div>
+      <div style="display:flex;align-items:end">
+        <button id="btnPermitAndStore" class="btn primary">簽名並呼叫 permitAndStore</button>
+      </div>
+    </div>
+    <div class="kv" style="margin-top:8px">
+      <div>最近交易哈希：</div><div id="tx2" class="mono muted">—</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>4) 查看 Note</h2>
+    <div style="margin-bottom:8px">
+      <button id="btnLoadCount" class="btn">讀取 notesCount & 最新</button>
+    </div>
+    <div class="kv">
+      <div>notesCount：</div><div id="notesCount" class="mono muted">—</div>
+      <div>lastNoteId：</div><div id="lastId" class="mono muted">—</div>
+      <div>最新 Note：</div><div id="latestNote" class="noteBox mono muted">—</div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div>
+        <label>用 id 讀取 getNote(id)</label>
+        <input id="noteId" placeholder="例如 0,1,2…" />
+      </div>
+      <div style="display:flex;align-items:end">
+        <button id="btnGetNote" class="btn">讀取</button>
+      </div>
+    </div>
+    <div class="kv" style="margin-top:8px">
+      <div>getNote 結果：</div><div id="noteResult" class="noteBox mono muted">—</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>訊息</h2>
+    <div id="log" class="mono muted">就緒。</div>
+  </div>
+</div>
+
+<script>
+  // ============ 工具 ============
+  const $ = (s) => document.querySelector(s);
+  const log = (msg, type="info") => {
+    const el = $("#log");
+    const ts = new Date().toLocaleTimeString();
+    const color = type==="error" ? "var(--err)" : "var(--muted)";
+    el.innerHTML = `<span class="muted">[${ts}]</span> <span style="color:${color}">${msg}</span>`;
+    console[type==="error" ? "error" : "log"](msg);
+  };
+  const isAddr = (v) => /^0x[a-fA-F0-9]{40}$/.test(v||"");
+  const short = (a) => a ? `${a.slice(0,6)}...${a.slice(-4)}` : "—";
+  const ts = (n) => new Date(Number(n)*1000).toLocaleString();
+
+  // ============ 狀態 ============
+  let provider=null, signer=null, me=null, chainId=null;
+  let board=null, clq=null;
+  let clqAddr=null, clqDecimals=18, clqName="CLQ", feeRaw=null;
+
+  // ============ ABI ============
+  const BOARD_ABI = [
+    "function clq() view returns (address)",
+    "function fee() view returns (uint256)",
+    "function storeMessage(string) returns (uint256)",
+    "function permitAndStore(string,uint256,uint8,bytes32,bytes32) returns (uint256)",
+    "function notesCount() view returns (uint256)",
+    "function getNote(uint256) view returns (tuple(address sender,string content,uint256 timestamp))",
+    "function lastNoteId() view returns (uint256)",
+    "function checkMyCLQBalance() view returns (uint256)",
+    "function checkMyCLQAllowance() view returns (uint256)"
+  ];
+
+  const ERC20_ABI = [
+    "function name() view returns (string)",
+    "function decimals() view returns (uint8)",
+    "function balanceOf(address) view returns (uint256)",
+    "function allowance(address,address) view returns (uint256)",
+    "function approve(address,uint256) returns (bool)",
+    "function nonces(address) view returns (uint256)"
+  ];
+
+  // ============ 連接 ============
+  async function connect() {
+    try {
+      if (!window.ethereum) { alert("請安裝 MetaMask"); return; }
+      provider = new ethers.BrowserProvider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      signer = await provider.getSigner();
+      me = await signer.getAddress();
+      const net = await provider.getNetwork();
+      chainId = Number(net.chainId);
+      $("#acc").textContent = me;
+      $("#net").textContent = `${net.name} (${chainId})`;
+      log("已連接："+short(me)+" @ "+net.name);
+    } catch (e) { log("連接失敗："+(e?.message||e), "error"); }
+  }
+
+  function getBoardAddr() {
+    const a = $("#boardAddr").value.trim();
+    if (!isAddr(a)) throw new Error("請輸入有效的 MessageBoard 地址");
+    return a;
+  }
+
+  async function ensureBoard(readOnly=true) {
+    const a = getBoardAddr();
+    const runner = readOnly ? await provider : signer || await provider.getSigner();
+    board = new ethers.Contract(a, BOARD_ABI, runner);
+    return board;
+  }
+
+  async function ensureCLQ(readOnly=true) {
+    if (!clqAddr) throw new Error("尚未讀取到 CLQ 代幣地址，請先按『讀取 CLQ/fee 資訊』");
+    const runner = readOnly ? await provider : signer || await provider.getSigner();
+    clq = new ethers.Contract(clqAddr, ERC20_ABI, runner);
+    return clq;
+  }
+
+  // ============ 讀取 CLQ 與 fee ============
+  async function loadBoardInfo() {
+    try {
+      await ensureBoard(true);
+      clqAddr = await board.clq();
+      feeRaw  = await board.fee();
+      $("#clqAddr").textContent = clqAddr;
+      $("#feeRaw").textContent = feeRaw.toString();
+
+      // 讀 token metadata
+      await ensureCLQ(true);
+      try {
+        clqName     = await clq.name();
+        clqDecimals = Number(await clq.decimals());
+      } catch {}
+      const feeHuman = ethers.formatUnits(feeRaw, clqDecimals);
+      $("#feeHuman").textContent = `${feeHuman} ${clqName}`;
+      $("#clqMeta").textContent  = `${clqName} / decimals=${clqDecimals}`;
+      log("已載入 CLQ/fee 資訊");
+    } catch (e) {
+      log("讀取 CLQ/fee 失敗："+(e?.message||e), "error");
+    }
+  }
+
+  // ============ Approve + storeMessage ============
+  async function doApprove() {
+    try {
+      if (!signer) await connect();
+      await ensureBoard(false);
+      await ensureCLQ(false);
+
+      const spenderIn = $("#spender").value.trim();
+      const spender = isAddr(spenderIn) ? spenderIn : getBoardAddr();
+
+      const amtStr = $("#approveAmount").value.trim();
+      const value = amtStr
+        ? ethers.parseUnits(amtStr, clqDecimals)
+        : feeRaw; // 預設=fee
+
+      const tx = await clq.approve(spender, value);
+      $("#tx1").textContent = tx.hash;
+      log("approve 送出："+tx.hash);
+      const rc = await tx.wait();
+      log(rc.status===1 ? "approve 成功" : "approve 可能失敗", rc.status===1 ? "info" : "error");
+    } catch (e) {
+      log("approve 失敗："+(e?.shortMessage||e?.message||e), "error");
+    }
+  }
+
+  async function checkAllowance() {
+    try {
+      if (!signer) await connect();
+      await ensureBoard(true);
+      await ensureCLQ(true);
+      const owner = me;
+      const spender = getBoardAddr();
+      const raw = await clq.allowance(owner, spender);
+      const human = ethers.formatUnits(raw, clqDecimals);
+      $("#allowance").textContent = `${human} ${clqName}`;
+      log(`allowance(${short(owner)}→${short(spender)})=${human}`);
+    } catch (e) {
+      log("查詢 allowance 失敗："+(e?.message||e), "error");
+    }
+  }
+
+  async function checkMyCLQBalance() {
+    try {
+      if (!signer) await connect();
+      await ensureCLQ(true);
+      const raw = await clq.balanceOf(me);
+      const human = ethers.formatUnits(raw, clqDecimals);
+      $("#myCLQ").textContent = `我的餘額：${human} ${clqName}`;
+      log("我的 CLQ 餘額："+human);
+    } catch (e) {
+      log("查詢餘額失敗："+(e?.message||e), "error");
+    }
+  }
+
+  async function storeMessage() {
+    try {
+      if (!signer) await connect();
+      await ensureBoard(false);
+      const content = $("#content").value;
+      if (!content || !content.trim()) throw new Error("請輸入 content");
+
+      const tx = await board.storeMessage(content);
+      $("#tx1").textContent = tx.hash;
+      log("storeMessage 送出："+tx.hash);
+      const rc = await tx.wait();
+      if (rc.status===1) {
+        log("storeMessage 成功，已扣 fee 並寫入");
+        await loadCountAndLatest();
+      } else {
+        log("storeMessage 回執非成功", "error");
+      }
+    } catch (e) {
+      log("storeMessage 失敗："+(e?.shortMessage||e?.message||e), "error");
+    }
+  }
+
+  // ============ Permit + permitAndStore ============
+  async function permitAndStore() {
+    try {
+      if (!signer) await connect();
+      await ensureBoard(false);
+      await ensureCLQ(false);
+
+      const content = $("#content").value;
+      if (!content || !content.trim()) throw new Error("請輸入 content");
+
+      // 1) 參數
+      let deadlineIn = $("#deadline").value.trim();
+      const deadline = deadlineIn ? BigInt(deadlineIn) : BigInt(Math.floor(Date.now()/1000) + 3600); // 一小時後
+      const valueHuman = $("#permitValue").value.trim();
+      const value = valueHuman ? ethers.parseUnits(valueHuman, clqDecimals) : feeRaw;
+
+      // 2) 準備 EIP-2612 typed data
+      const owner = me;
+      const spender = getBoardAddr();
+      const nonce = await clq.nonces(owner);
+      const name  = clqName || await clq.name();
+
+      const domain = {
+        name,
+        version: "1",
+        chainId,
+        verifyingContract: clqAddr
+      };
+      const types = {
+        Permit: [
+          {name:"owner", type:"address"},
+          {name:"spender", type:"address"},
+          {name:"value", type:"uint256"},
+          {name:"nonce", type:"uint256"},
+          {name:"deadline", type:"uint256"},
+        ]
+      };
+      const message = { owner, spender, value, nonce, deadline };
+
+      // 3) 讓錢包簽名
+      const sig = await signer.signTypedData(domain, types, message);
+      const { r, s, v } = ethers.Signature.from(sig);
+
+      // 4) 呼叫合約的 permitAndStore（內部會先 permit 再扣款）
+      const tx = await board.permitAndStore(content, deadline, v, r, s);
+      $("#tx2").textContent = tx.hash;
+      log("permitAndStore 送出："+tx.hash);
+      const rc = await tx.wait();
+      if (rc.status===1) {
+        log("permitAndStore 成功（已完成核准+扣款+寫入）");
+        await loadCountAndLatest();
+      } else {
+        log("permitAndStore 回執非成功", "error");
+      }
+    } catch (e) {
+      log("permitAndStore 失敗："+(e?.shortMessage||e?.message||e), "error");
+    }
+  }
+
+  // ============ 讀取 notes ============
+  async function loadCountAndLatest() {
+    try {
+      await ensureBoard(true);
+      const count = Number(await board.notesCount());
+      $("#notesCount").textContent = String(count);
+      if (count>0) {
+        const lastId = Number(await board.lastNoteId());
+        $("#lastId").textContent = String(lastId);
+        const n = await board.getNote(lastId);
+        $("#latestNote").textContent =
+          `#${lastId}\nsender: ${n.sender}\ncontent: ${n.content}\ntimestamp: ${n.timestamp} (${ts(n.timestamp)})`;
+        $("#latestNote").classList.remove("muted");
+      } else {
+        $("#lastId").textContent = "—";
+        $("#latestNote").textContent = "(尚無留言)";
+      }
+      log("已讀取 notesCount / 最新 note");
+    } catch (e) {
+      log("讀取最新 note 失敗："+(e?.message||e), "error");
+    }
+  }
+
+  async function getNoteById() {
+    try {
+      await ensureBoard(true);
+      const idStr = $("#noteId").value.trim();
+      const id = Number(idStr);
+      if (!Number.isInteger(id) || id<0) throw new Error("請輸入 >=0 的整數 id");
+      const n = await board.getNote(id);
+      $("#noteResult").textContent =
+        `#${id}\nsender: ${n.sender}\ncontent: ${n.content}\ntimestamp: ${n.timestamp} (${ts(n.timestamp)})`;
+      $("#noteResult").classList.remove("muted");
+      log(`getNote(${id}) 完成`);
+    } catch (e) {
+      log("getNote 失敗："+(e?.message||e), "error");
+    }
+  }
+
+  // ============ 本地儲存 ============
+  const KEY_BOARD = "clq_board_addr";
+  function restore() {
+    const a = localStorage.getItem(KEY_BOARD);
+    if (a) $("#boardAddr").value = a;
+  }
+  function saveBoard() {
+    const a = $("#boardAddr").value.trim();
+    if (!isAddr(a)) { log("請輸入有效的 MessageBoard 地址", "error"); return; }
+    localStorage.setItem(KEY_BOARD, a);
+    log("已儲存 MessageBoard 地址");
+  }
+  function clearBoard() {
+    localStorage.removeItem(KEY_BOARD);
+    $("#boardAddr").value = "";
+    log("已清除 MessageBoard 地址");
+  }
+
+  // ============ 綁定 ============
+  $("#btnConnect").addEventListener("click", connect);
+  $("#btnSaveBoard").addEventListener("click", saveBoard);
+  $("#btnClearBoard").addEventListener("click", clearBoard);
+  $("#btnLoadBoard").addEventListener("click", loadBoardInfo);
+
+  $("#btnApprove").addEventListener("click", doApprove);
+  $("#btnStore").addEventListener("click", storeMessage);
+  $("#btnCheckAllowance").addEventListener("click", checkAllowance);
+  $("#btnMyCLQBalance").addEventListener("click", checkMyCLQBalance);
+
+  $("#btnPermitAndStore").addEventListener("click", permitAndStore);
+
+  $("#btnLoadCount").addEventListener("click", loadCountAndLatest);
+  $("#btnGetNote").addEventListener("click", getNoteById);
+
+  // ============ 初始化 ============
+  if (!window.ethers) {
+    log("ethers 載入失敗（被封鎖？）。請換網路或 CDN。", "error");
+  } else {
+    log("已就緒：1) 連接 2) 輸入 MessageBoard 位址 3) 讀取 CLQ/fee");
+  }
+  restore();
+</script>
+</body>
+</html>

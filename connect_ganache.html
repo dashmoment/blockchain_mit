@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Check Balance</title>
+</head>
+<body>
+  <h1>Balance</h1>
+  <input type="text" id="address" style="width:300px" 
+         value="0xAD4D13871e7B14411E192677cd7cf94ba7068c68">
+  <button onclick="getBalance()">Get Balance</button>
+  <br><br>
+  <div id="status" style="color:#0000FF"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
+  <script>
+    // ---------------- Blockchain handshake ----------------
+    // Create a Web3 instance from MetaMask if available,
+    // otherwise connect to local HTTP provider.
+    if (typeof window.ethereum !== 'undefined') {
+      web3 = new Web3(window.ethereum);
+      console.log("✅ Connected to MetaMask provider");
+    } else if (typeof web3 !== 'undefined') {
+      web3 = new Web3(web3.currentProvider);
+      console.log("✅ Using existing web3 provider");
+    } else {
+      web3 = new Web3(new Web3.providers.HttpProvider("http://localhost:8545"));
+      console.log("⚙️  Using local HTTP provider (http://localhost:8545)");
+    }
+
+    // ---------------- Get balance and update UI ----------------
+    async function getBalance() {
+      const address = document.getElementById('address').value.trim();
+      const statusDiv = document.getElementById('status');
+
+      if (!web3.utils.isAddress(address)) {
+        statusDiv.innerHTML = "❌ Invalid address format.";
+        return;
+      }
+
+      try {
+        const balanceWei = await web3.eth.getBalance(address);
+        const balanceEth = web3.utils.fromWei(balanceWei, 'ether');
+        statusDiv.innerHTML = `💰 Balance: ${balanceEth} ETH`;
+      } catch (err) {
+        console.error(err);
+        statusDiv.innerHTML = "❌ Error fetching balance. Check provider or network.";
+      }
+    }
+  </script>
+</body>
+</html>

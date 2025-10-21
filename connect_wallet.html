@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>MetaMask 連接測試</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- ✅ 先載 ethers.js (UMD版本) -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+  <script>
+    // 若第一個 CDN 載入失敗，自動使用備援
+    if (!window.ethers) {
+      document.write('<script src="https://unpkg.com/ethers@6.13.2/dist/ethers.umd.min.js"><\/script>');
+    }
+  </script>
+</head>
+<body>
+  <h2>MetaMask 連接測試</h2>
+  <button id="connectBtn">連接 MetaMask</button>
+  <p id="status">狀態：未連接</p>
+
+  <!-- ✅ 一定要在 ethers 載入後執行 -->
+  <script>
+    const btn = document.getElementById("connectBtn");
+    const status = document.getElementById("status");
+
+    async function connectWallet() {
+      try {
+        if (!window.ethereum) {
+          status.textContent = "狀態：未偵測到 MetaMask";
+          alert("請先安裝 MetaMask 外掛！");
+          return;
+        }
+        // ✅ 這裡 ethers 已可用
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
+        const signer = await provider.getSigner();
+        const address = await signer.getAddress();
+        const network = await provider.getNetwork();
+
+        status.textContent = `已連接：${address} (${network.name})`;
+        console.log("Connected:", address, network);
+      } catch (err) {
+        console.error(err);
+        status.textContent = "連接失敗：" + (err?.message || err);
+      }
+    }
+
+    btn.addEventListener("click", connectWallet);
+  </script>
+</body>
+</html>
