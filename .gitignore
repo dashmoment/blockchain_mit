@@ -9,3 +9,6 @@
 .env.production
 .deps/
 .states/
+.wake/
+bin/
+artifacts/

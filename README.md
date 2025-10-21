@@ -16,3 +16,7 @@
 ## Sample for connect Metamask
 `web/connect_wallet.html`
 
+
+
+## Reference
+1. [ethereumbook](https://github.com/ethereumbook/ethereumbook/blob/develop/01what-is.asciidoc)
